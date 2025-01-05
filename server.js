@@ -4,10 +4,13 @@ const dotenv = require('dotenv');
 const orderRoutes = require('./routes/order');
 const { errorHandler } = require('./middleware/errorHandler');
 const { setupBullQueue } = require('./config/bull');
+const cors = require('cors');
+
 
 dotenv.config();
 
 const app = express();
+app.use(cors());
 const PORT = process.env.PORT || 3003;
 
 app.use(express.json());
