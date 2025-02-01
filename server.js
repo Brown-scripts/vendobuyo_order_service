@@ -3,7 +3,6 @@ const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const orderRoutes = require('./routes/order');
 const { errorHandler } = require('./middleware/errorHandler');
-const { setupBullQueue } = require('./config/bull');
 const cors = require('cors');
 
 
@@ -20,11 +19,8 @@ mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('Connected to MongoDB'))
   .catch((err) => console.error('MongoDB connection error:', err));
 
-// Setup Bull queue
-setupBullQueue();
-
 app.get('/test', (req, res) => {
-  res.status(200).json({ message: 'Hello from Vendobuyo API!' });
+  res.status(200).json({ message: 'Hello from Vendobuyo API!' });
 });
 
 // Routes
