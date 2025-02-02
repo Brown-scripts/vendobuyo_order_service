@@ -1,3 +1,5 @@
+const User = require('../models/User');
+const Product = require('../models/Product');
 const Order = require('../models/Order');
 const { sendEmail } = require('../utils/emailSender');
 const amqp = require("amqplib/callback_api");
@@ -14,7 +16,7 @@ const sendToQueue = (queue, message) => {
         console.error("RabbitMQ channel error:", error1);
         return;
       }
-      
+
       channel.assertQueue(queue, { durable: true });
       channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)), { persistent: true });
       console.log("Sent message to queue:", message);
@@ -33,18 +35,23 @@ exports.createOrder = async (req, res) => {
       return res.status(400).json({ message: 'User not authenticated' });
     }
 
-    const { products, totalPrice } = req.body;
+    const { sellerIds, products, totalPrice } = req.body;
 
+    console.log(1)
     // Create and save the order
-    const order = await new Order({ userId, products, totalPrice }).save();
+    const order = await new Order({ userId, sellerIds, products, totalPrice }).save();
+    console.log(2)
 
     // Populate user details from Order itself (no extra User query)
     const populatedOrder = await Order.findById(order._id)
-      .populate({ path: "userId", select: "email phone -_id" }); // Get only email and phone
+      .populate({ path: "userId", select: "email phone _id" }); // Get only email and phone
+    console.log(3)
 
     if (!populatedOrder.userId) {
+      console.log(4)
       return res.status(404).json({ message: 'User not found' });
     }
+    console.log(5)
 
     // Prepare notification message
     const message = {
@@ -56,15 +63,19 @@ exports.createOrder = async (req, res) => {
       targetEmail: populatedOrder.userId.email,
       targetPhone: populatedOrder.userId.phone,
     };
+    console.log(6)
 
     sendToQueue("order_status_queue", message);
+    console.log(7)
 
     // Send email notification
     const subject = 'Order Confirmation';
     const body = `<p>Hi, </p><p>Your order has been placed successfully. Order ID: ${populatedOrder._id}</p>`;
     await sendEmail(populatedOrder.userId.email, subject, body);
+    console.log(8)
 
     res.status(201).json(populatedOrder);
+    console.log(9)
   } catch (error) {
     console.error('Error creating order:', error);
     res.status(500).json({ message: 'Error creating order' });
@@ -117,36 +128,36 @@ exports.updateOrderStatus = async (req, res) => {
 
 exports.getOrdersBySeller = async (req, res) => {
   try {
+    // Seller's ID from request params
     const sellerId = req.params.sellerId;
 
-    // Find all orders where the seller is involved
     const orders = await Order.find({ sellerIds: sellerId })
       .populate({
         path: "products.productId",
-        select: "name price sellerId", // Get only necessary product details
+        select: "title description stockQuantity price sellerId imageUrl shopId", // Only necessary fields
       })
-      .select("_id userId totalPrice status products") // Fetch only relevant fields
-      .lean(); // Converts Mongoose documents into plain JavaScript objects for performance
+      .populate("userId", "name email phone"); // Optional: Fetch user details
 
-    // Filter out only the products belonging to the given seller in each order
-    const formattedOrders = orders.map(order => ({
-      orderId: order._id,
-      userId: order.userId,
-      totalPrice: order.totalPrice,
-      status: order.status,
-      products: order.products
-        .filter(p => p.productId && p.productId.sellerId.toString() === sellerId)
-        .map(p => ({
-          productId: p.productId._id,
-          name: p.productId.name,
-          price: p.price,
-          quantity: p.quantity,
-        })),
-    })).filter(order => order.products.length > 0); // Remove orders where the seller has no products
+    console.log(orders)
+    console.log(sellerId)
+    // Filter each order to only include the seller's products
+    const filteredOrders = orders.map(order => {
+      const sellerProducts = order.products.filter(product =>
+        product.productId.sellerId.toString() === sellerId
+      );
 
-    res.status(200).json(formattedOrders);
-  } catch (error) {
-    res.status(500).json({ message: "Error fetching seller's orders", error: error.message });
+      return {
+        orderId: order._id,
+        buyer: order.userId, // Basic user details
+        products: sellerProducts, // Only products associated with this seller
+        status: order.status,
+        createdAt: order.createdAt,
+      };
+    });
+
+    res.status(200).json({ orders: filteredOrders });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch seller orders", error: err.message });
   }
 };
 
@@ -162,6 +173,8 @@ exports.getSellerOrders = async (req, res) => {
       })
       .populate("userId", "name email phone"); // Optional: Fetch user details
 
+    console.log(orders)
+    console.log(sellerId)
     // Filter each order to only include the seller's products
     const filteredOrders = orders.map(order => {
       const sellerProducts = order.products.filter(product =>
