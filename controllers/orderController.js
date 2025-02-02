@@ -34,24 +34,27 @@ exports.createOrder = async (req, res) => {
     if (!userId) {
       return res.status(400).json({ message: 'User not authenticated' });
     }
+    
+    let { sellerIds, products, totalPrice } = req.body;
 
-    const { sellerIds, products, totalPrice } = req.body;
+    if (!sellerIds?.length) {
+      return res.status(400).json({ message: 'Seller ids array empty' });
+    }
 
-    console.log(1)
+    // Remove duplicate sellerIds
+    sellerIds = [...new Set(sellerIds)];
+
     // Create and save the order
     const order = await new Order({ userId, sellerIds, products, totalPrice }).save();
-    console.log(2)
 
     // Populate user details from Order itself (no extra User query)
     const populatedOrder = await Order.findById(order._id)
       .populate({ path: "userId", select: "email phone _id" }); // Get only email and phone
-    console.log(3)
 
     if (!populatedOrder.userId) {
-      console.log(4)
+      console.log(4);
       return res.status(404).json({ message: 'User not found' });
     }
-    console.log(5)
 
     // Prepare notification message
     const message = {
@@ -63,19 +66,15 @@ exports.createOrder = async (req, res) => {
       targetEmail: populatedOrder.userId.email,
       targetPhone: populatedOrder.userId.phone,
     };
-    console.log(6)
 
     sendToQueue("order_status_queue", message);
-    console.log(7)
 
     // Send email notification
     const subject = 'Order Confirmation';
     const body = `<p>Hi, </p><p>Your order has been placed successfully. Order ID: ${populatedOrder._id}</p>`;
     await sendEmail(populatedOrder.userId.email, subject, body);
-    console.log(8)
 
     res.status(201).json(populatedOrder);
-    console.log(9)
   } catch (error) {
     console.error('Error creating order:', error);
     res.status(500).json({ message: 'Error creating order' });

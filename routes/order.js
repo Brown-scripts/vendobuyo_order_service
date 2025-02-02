@@ -8,7 +8,6 @@ router.post('/', authenticate, createOrder);
 router.get('/seller-orders', authenticateSeller, getSellerOrders);
 router.get('/seller-orders/:sellerId', authenticate, getOrdersBySeller);
 router.get('/', authenticate, getOrders);
-router.get('/:sellerId', authenticate, getOrders);
 router.put('/:id/status', authenticate, updateOrderStatus);
 router.put('/:orderId/product-status', authenticateSellerOrAdmin, updateOrderProductStatus);
 
